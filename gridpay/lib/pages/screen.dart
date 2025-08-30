@@ -4,8 +4,8 @@ import 'package:gridpay/pages/Settings/ProfilePage.dart';
 import 'package:gridpay/pages/auth/authService.dart';
 import 'package:gridpay/pages/auth/login.dart'; // Import de la page de login
 import 'package:gridpay/pages/ServiceHTTP/facture/createInvoicePage.dart';
-import 'package:gridpay/pages/ServiceHTTP/facture/view/PayementsPage.dart';
-import 'package:gridpay/pages/payement/historyPage.dart';
+import 'package:gridpay/pages/ServiceHTTP/facture/view/InvoicePage.dart';
+import 'package:gridpay/pages/ServiceHTTP/payement/PaymentHistoryPage.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -266,7 +266,7 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
       ),
-      bottomNavigationBar: _buildBottomNavigationBar(context),
+      // bottomNavigationBar: _buildBottomNavigationBar(context),
     );
   }
 
@@ -307,15 +307,28 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ],
               ),
-              Container(
-                width: 50,
-                height: 50,
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade700,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 2),
+              GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => ProfilePage()),
+                  );
+                  // Ajoutez votre logique de paiement ici
+                },
+                child: Container(
+                  width: 50,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade700,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                  ),
+                  child: const Icon(
+                    Icons.person,
+                    color: Colors.white,
+                    size: 24,
+                  ),
                 ),
-                child: const Icon(Icons.person, color: Colors.white, size: 24),
               ),
             ],
           ),
@@ -387,10 +400,13 @@ class _HomePageState extends State<HomePage> {
         'icon': Icons.receipt,
         'title': 'Invoices',
         'color': Colors.blue,
-        'onTap': () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => InvoiceHistoryPage()),
-        ),
+        'onTap': () {
+          _leading(context);
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => InvoicePage()),
+          );
+        },
       },
       {
         'icon': Icons.add_circle,
@@ -402,7 +418,13 @@ class _HomePageState extends State<HomePage> {
         'icon': Icons.payment,
         'title': 'Payments',
         'color': Colors.orange,
-        'onTap': () {},
+        'onTap': () {
+          _leading(context);
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => PaymentHistoryPage()),
+          );
+        },
       },
       {
         'icon': Icons.analytics,
@@ -712,58 +734,71 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildBottomNavigationBar(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.3),
-            blurRadius: 10,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
-      child: BottomNavigationBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        selectedItemColor: Colors.blue,
-        unselectedItemColor: Colors.grey,
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-          switch (index) {
-            case 0:
-              break;
-            case 1:
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => InvoiceHistoryPage()),
-              );
-              break;
-            case 2:
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => PaymentsPage()),
-              );
-              break;
-            case 3:
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => ProfilePage()),
-              );
-              break;
-          }
-        },
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.receipt), label: 'Invoices'),
-          BottomNavigationBarItem(icon: Icon(Icons.payment), label: 'Payments'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
-        ],
-      ),
-    );
+  //Widget _buildBottomNavigationBar(BuildContext context) {
+  //  return Container(
+  //    decoration: BoxDecoration(
+  //      color: const Color(0xFF1A1A1A),
+  //      boxShadow: [
+  //        BoxShadow(
+  //          color: Colors.black.withOpacity(0.3),
+  //          blurRadius: 10,
+  //          offset: const Offset(0, -2),
+  //        ),
+  //      ],
+  //    ),
+  //    child: BottomNavigationBar(
+  //      backgroundColor: Colors.transparent,
+  //      elevation: 0,
+  //      selectedItemColor: Colors.blue,
+  //      unselectedItemColor: Colors.grey,
+  //      currentIndex: _currentIndex,
+  //      onTap: (index) {
+  //        setState(() {
+  //          _currentIndex = index;
+  //        });
+  //        switch (index) {
+  //          case 0:
+  //            break;
+  //          case 1:
+  //            Navigator.push(
+  //              context,
+  //              MaterialPageRoute(builder: (context) => PaymentHistoryPage()),
+  //            );
+  //            break;
+  //          case 2:
+  //            Navigator.push(
+  //              context,
+  //              MaterialPageRoute(builder: (context) => InvoicePage()),
+  //            );
+  //            break;
+  //          case 3:
+  //            Navigator.push(
+  //              context,
+  //              MaterialPageRoute(builder: (context) => ProfilePage()),
+  //            );
+  //            break;
+  //        }
+  //      },
+  //      items: const [
+  //        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+  //        BottomNavigationBarItem(icon: Icon(Icons.receipt), label: 'Invoices'),
+  //        BottomNavigationBarItem(icon: Icon(Icons.payment), label: 'Payments'),
+  //        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+  //      ],
+  //    ),
+  //  );
+  //}
+  //
+  void _leading(BuildContext context) {
+    if (_authToken == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Authentication required. Please login again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      _redirectToLogin();
+      return;
+    }
   }
 }
