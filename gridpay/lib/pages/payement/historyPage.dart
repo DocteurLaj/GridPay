@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:gridpay/pages/payement/InvoiceDetailPage.dart';
+import 'package:gridpay/pages/ServiceHTTP/facture/view/InvoiceDetailPage.dart';
 
 class InvoiceHistoryPage extends StatelessWidget {
   final List<Map<String, dynamic>> invoices = [

@@ -1,13 +1,48 @@
 import 'package:flutter/material.dart';
+import 'package:gridpay/pages/ServiceHTTP/meter/meters_page.dart';
 import 'package:gridpay/pages/auth/authService.dart';
-import 'package:gridpay/pages/auth/login.dart';
 
-class ProfilePage extends StatelessWidget {
-  final AuthService _authService = AuthService();
-
+class ProfilePage extends StatefulWidget {
   ProfilePage({super.key});
 
   @override
+  State<ProfilePage> createState() => _ProfilePageState();
+}
+
+class _ProfilePageState extends State<ProfilePage> {
+  final AuthService _authService = AuthService();
+  String? _userEmail;
+  // String? _userId;
+  String? _userName;
+  String? _userPhone;
+  String? _userCreatedAt;
+
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+  }
+
+  Future<void> _loadUserData() async {
+    final email = await _authService.getEmail();
+    //final userId = await _authService.getUserId();
+    final userName = await _authService.getName();
+    final userPhone = await _authService.getPhone();
+    final usercreatedAt = await _authService.getUserCreatedAt();
+
+    setState(() {
+      _userEmail = email;
+      //_userId = userId;
+      _userName = userName;
+      _userPhone = userPhone;
+      _userCreatedAt = usercreatedAt;
+
+      _isLoading = false;
+    });
+  }
+
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0A0A0A),
@@ -19,49 +54,85 @@ class ProfilePage extends StatelessWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
-        actions: [IconButton(icon: const Icon(Icons.edit), onPressed: () {})],
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.edit),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => MetersPage()),
+              );
+            },
+          ),
+        ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            // Profile Card
-            _buildProfileCard(context),
-            const SizedBox(height: 24),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                children: [
+                  // Profile Card
+                  _buildProfileCard(context),
+                  const SizedBox(height: 24),
 
-            // Account Information
-            _buildInfoSection('Account Information', [
-              _buildInfoItem('Email', 'alexandre@example.com', Icons.email),
-              _buildInfoItem('Phone', '+243 97 123 4567', Icons.phone),
-              _buildInfoItem(
-                'Member Since',
-                'January 2024',
-                Icons.calendar_today,
+                  // Account Information
+                  _buildInfoSection('Account Information', [
+                    _buildInfoItem(
+                      'Email',
+                      _userEmail ?? 'invalide',
+                      Icons.email,
+                    ),
+                    _buildInfoItem('Phone', '+$_userPhone', Icons.phone),
+                    _buildInfoItem('Meters', 'CNT-452-985', Icons.gas_meter),
+                    _buildInfoItem(
+                      'Member Since',
+                      _userCreatedAt ?? 'invalide',
+                      Icons.calendar_today,
+                    ),
+                  ]),
+
+                  const SizedBox(height: 24),
+
+                  // Billing Information
+                  _buildInfoSection('Billing Information', [
+                    // _buildInfoItem(
+                    //   'Address',
+                    //   '123 Energy Street, Kinshasa',
+                    //   Icons.location_on,
+                    // ),
+                    _buildInfoItem(
+                      'Payment Method',
+                      'Mobile Money',
+                      Icons.payment,
+                    ),
+                    _buildInfoItem(
+                      'Billing Cycle',
+                      'Energy Kwh',
+                      Icons.calendar_month,
+                    ),
+                  ]),
+
+                  const SizedBox(height: 24),
+
+                  // Statistics
+                  //_buildStatsGrid(context),
+                  SizedBox(height: 30),
+                  SizedBox(
+                    width: 300,
+                    height: 50,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        _authService.logout(context);
+                      },
+                      child: Text("logout", style: TextStyle(fontSize: 17)),
+                    ),
+                  ),
+
+                  const SizedBox(height: 32),
+                ],
               ),
-            ]),
-
-            const SizedBox(height: 24),
-
-            // Billing Information
-            _buildInfoSection('Billing Information', [
-              _buildInfoItem(
-                'Address',
-                '123 Energy Street, Kinshasa',
-                Icons.location_on,
-              ),
-              _buildInfoItem('Payment Method', 'Mobile Money', Icons.payment),
-              _buildInfoItem('Billing Cycle', 'Monthly', Icons.calendar_month),
-            ]),
-
-            const SizedBox(height: 24),
-
-            // Statistics
-            _buildStatsGrid(context),
-
-            const SizedBox(height: 32),
-          ],
-        ),
-      ),
+            ),
     );
   }
 
@@ -85,9 +156,9 @@ class ProfilePage extends StatelessWidget {
             child: const Icon(Icons.person, color: Colors.white, size: 40),
           ),
           const SizedBox(height: 16),
-          const Text(
-            'Alexandre K',
-            style: TextStyle(
+          Text(
+            _userName ?? 'Non disponible',
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 20,
               fontWeight: FontWeight.bold,
@@ -95,16 +166,16 @@ class ProfilePage extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'Premium Member',
+            _userEmail ?? 'invalide',
             style: TextStyle(color: Colors.blue.shade300, fontSize: 14),
           ),
           const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildProfileStat('24', 'Invoices'),
-              _buildProfileStat('21', 'Paid'),
-              _buildProfileStat('3', 'Pending'),
+              //_buildProfileStat('24', 'Invoices'),
+              //_buildProfileStat('21', 'Paid'),
+              //_buildProfileStat('3', 'Pending'),
             ],
           ),
         ],
@@ -112,7 +183,7 @@ class ProfilePage extends StatelessWidget {
     );
   }
 
-  Widget _buildProfileStat(String value, String label) {
+  Widget buildProfileStat(String value, String label) {
     return Column(
       children: [
         Text(
@@ -180,7 +251,7 @@ class ProfilePage extends StatelessWidget {
     );
   }
 
-  Widget _buildStatsGrid(BuildContext context) {
+  Widget buildStatsGrid(BuildContext context) {
     return GridView(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -198,16 +269,6 @@ class ProfilePage extends StatelessWidget {
           Colors.green,
         ),
         _buildStatCard('Energy Used', '187.5 kWh', Icons.bolt, Colors.blue),
-        SizedBox(
-          width: 100,
-          height: 100,
-          child: ElevatedButton(
-            onPressed: () {
-              _authService.logout(context);
-            },
-            child: Text("logout"),
-          ),
-        ),
       ],
     );
   }

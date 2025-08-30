@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:gridpay/pages/auth/authService.dart';
 import 'package:gridpay/pages/screen.dart';
 
-
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
 
@@ -189,6 +188,7 @@ class _AuthScreenState extends State<AuthScreen> {
           _emailController.text,
           _passwordController.text,
           _phoneController.text.replaceAll(RegExp(r'[^\d]'), ''),
+          _nameController.text,
         );
 
         setState(() {

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:gridpay/pages/ServiceHTTP/meter/meter_service.dart';
 import 'package:gridpay/pages/Settings/ProfilePage.dart';
-import 'package:gridpay/pages/facture/createInvoicePage.dart';
-import 'package:gridpay/pages/payement/PayementsPage.dart';
+import 'package:gridpay/pages/auth/authService.dart';
+import 'package:gridpay/pages/auth/login.dart'; // Import de la page de login
+import 'package:gridpay/pages/ServiceHTTP/facture/createInvoicePage.dart';
+import 'package:gridpay/pages/ServiceHTTP/facture/view/PayementsPage.dart';
 import 'package:gridpay/pages/payement/historyPage.dart';
 
 class HomePage extends StatefulWidget {
@@ -12,33 +15,263 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  final AuthService _authService = AuthService();
+  final MeterService _meterService = MeterService();
+
+  String? _userEmail;
+  String? _userName;
+  String? _userPhone;
+  String? _authToken;
+  List<Map<String, dynamic>> _userMeters = [];
+  bool _isLoading = true;
+  String? _errorMessage;
+  bool _redirectingToLogin = false;
+
   int _currentIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+  }
+
+  Future<void> _loadUserData() async {
+    try {
+      print('Loading user data...');
+
+      final token = await _authService.getToken();
+
+      // Vérifier d'abord si le token existe
+      if (token == null || token.isEmpty) {
+        print('No token found, redirecting to login');
+        _redirectToLogin();
+        return;
+      }
+
+      // Charger les autres données utilisateur seulement si le token existe
+      final email = await _authService.getEmail();
+      final userName = await _authService.getName();
+      final userPhone = await _authService.getPhone();
+
+      print(
+        'User data loaded: email=$email, name=$userName, phone=$userPhone, token=exists',
+      );
+
+      setState(() {
+        _userEmail = email;
+        _userName = userName;
+        _userPhone = userPhone;
+        _authToken = token;
+      });
+
+      // Charger les compteurs
+      print('Loading user meters...');
+      await _loadUserMeters();
+    } catch (e) {
+      print('Error loading user data: $e');
+      setState(() {
+        _errorMessage = 'Error loading data: $e';
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _redirectToLogin() {
+    if (_redirectingToLogin) return;
+
+    _redirectingToLogin = true;
+    Future.delayed(Duration.zero, () {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const AuthScreen()),
+      );
+    });
+  }
+
+  Future<void> _loadUserMeters() async {
+    try {
+      final result = await _meterService.getUserMeters();
+
+      if (result['success'] == true) {
+        final meters = result['meters'];
+        if (meters != null && meters is List) {
+          setState(() {
+            _userMeters = List<Map<String, dynamic>>.from(meters);
+            _isLoading = false;
+          });
+          print('Loaded ${_userMeters.length} meters');
+        } else {
+          print('No meters data or invalid format');
+          setState(() {
+            _isLoading = false;
+          });
+        }
+      } else {
+        print('Error loading meters: ${result['message']}');
+        // Si l'erreur est due à un token invalide, rediriger vers login
+        if (result['message']?.toString().toLowerCase().contains('token') ??
+            false) {
+          _redirectToLogin();
+        } else {
+          setState(() {
+            _errorMessage = result['message'] ?? 'Failed to load meters';
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      print('Error in loadUserMeters: $e');
+      setState(() {
+        _errorMessage = 'Meters loading error: $e';
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _navigateToCreateInvoice(BuildContext context) {
+    if (_authToken == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Authentication required. Please login again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      _redirectToLogin();
+      return;
+    }
+
+    if (_userMeters.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No meters available. Please add a meter first.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CreateInvoicePage(
+          userName: _userName ?? 'Unknown',
+          userEmail: _userEmail ?? 'Unknown',
+          userPhone: _userPhone ?? 'Unknown',
+          authToken: _authToken!,
+          userMeters: _userMeters,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorWidget() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, color: Colors.red, size: 64),
+            const SizedBox(height: 16),
+            Text(
+              _errorMessage ?? 'Unknown error occurred',
+              style: const TextStyle(color: Colors.white, fontSize: 16),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: () {
+                setState(() {
+                  _isLoading = true;
+                  _errorMessage = null;
+                });
+                _loadUserData();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Retry'),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () {
+                _redirectToLogin();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Login Again'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Si on est en train de rediriger vers le login, afficher un écran vide
+    if (_redirectingToLogin) {
+      return const Scaffold(
+        backgroundColor: Color(0xFF0A0A0A),
+        body: Center(
+          child: CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+          ),
+        ),
+      );
+    }
+
+    if (_isLoading) {
+      return const Scaffold(
+        backgroundColor: Color(0xFF0A0A0A),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+              ),
+              SizedBox(height: 16),
+              Text('Loading...', style: TextStyle(color: Colors.white)),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_errorMessage != null) {
+      return Scaffold(
+        backgroundColor: const Color(0xFF0A0A0A),
+        body: _buildErrorWidget(),
+      );
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFF0A0A0A),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            // Header Section
-            _buildHeaderSection(),
-
-            // Quick Actions Grid
-            _buildQuickActions(context),
-
-            // Recent Activity
-            _buildRecentActivitySection(),
-
-            // Statistics Cards
-            _buildStatisticsSection(),
-
-            const SizedBox(height: 32),
-          ],
+      body: RefreshIndicator(
+        onRefresh: _loadUserData,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(
+            children: [
+              _buildHeaderSection(),
+              _buildQuickActions(context),
+              _buildRecentActivitySection(),
+              _buildStatisticsSection(),
+              const SizedBox(height: 32),
+            ],
+          ),
         ),
       ),
       bottomNavigationBar: _buildBottomNavigationBar(context),
     );
   }
+
+  // ... [Gardez toutes vos méthodes _buildHeaderSection, _buildQuickActions, etc. intactes] ...
+  // VOUS POUVEZ COPIER-COLLER TOUTES VOS METHODES EXISTANTES ICI
 
   Widget _buildHeaderSection() {
     return Container(
@@ -64,8 +297,8 @@ class _HomePageState extends State<HomePage> {
                     'Welcome back,',
                     style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
                   ),
-                  const Text(
-                    'Alexandre',
+                  Text(
+                    _userName ?? "Guest",
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 24,
@@ -163,10 +396,7 @@ class _HomePageState extends State<HomePage> {
         'icon': Icons.add_circle,
         'title': 'Create Invoice',
         'color': Colors.green,
-        'onTap': () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => CreateInvoicePage()),
-        ),
+        'onTap': () => _navigateToCreateInvoice(context),
       },
       {
         'icon': Icons.payment,
@@ -229,6 +459,8 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildActionCard(Map<String, dynamic> action) {
+    final isCreateInvoice = action['title'] == 'Create Invoice';
+
     return GestureDetector(
       onTap: action['onTap'],
       child: Container(
@@ -265,6 +497,13 @@ class _HomePageState extends State<HomePage> {
               ),
               textAlign: TextAlign.center,
             ),
+            if (isCreateInvoice && _userMeters.isEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                'No meters',
+                style: TextStyle(color: Colors.red.shade300, fontSize: 10),
+              ),
+            ],
           ],
         ),
       ),
@@ -495,10 +734,8 @@ class _HomePageState extends State<HomePage> {
           setState(() {
             _currentIndex = index;
           });
-          // Navigation vers les différentes pages
           switch (index) {
             case 0:
-              // Déjà sur Home
               break;
             case 1:
               Navigator.push(
