@@ -1,71 +1,39 @@
-# setup_db.py
-import sqlite3
-import datetime
+# test_mqtt.py
+import paho.mqtt.client as mqtt
+import json
+import time
+from datetime import datetime
 
-DB = "gridpay.db"
+BROKER = "broker.hivemq.com"
+PORT = 1883
+METER_NUMBER = "CNT-452-568-985"
+TOPIC_CONSUMPTION = f"electricity/{METER_NUMBER}/consumption"
 
-def create_tables():
-    conn = sqlite3.connect(DB)
-    cur = conn.cursor()
+def on_connect(client, userdata, flags, rc):
+    if rc == 0:
+        print("Connecté au broker MQTT")
+    else:
+        print(f"Erreur de connexion: {rc}")
 
-    # Table des utilisateurs avec téléphone
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        email TEXT UNIQUE NOT NULL,
-        phone TEXT UNIQUE NOT NULL,
-        meter_number TEXT UNIQUE NOT NULL
-    )
-    """)
+client = mqtt.Client()
+client.on_connect = on_connect
 
-    # Table des compteurs (facultatif, pour séparer la relation)
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS meters (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        meter_number TEXT UNIQUE NOT NULL,
-        user_id INTEGER,
-        FOREIGN KEY (user_id) REFERENCES users(id)
-    )
-    """)
+client.connect(BROKER, PORT)
+client.loop_start()
 
-    # Table des factures
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS facture (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        total_kwh REAL DEFAULT 0,
-        status TEXT DEFAULT 'unpaid',  -- unpaid ou paid
-        date_limit DATE,
-        FOREIGN KEY (user_id) REFERENCES users(id)
-    )
-    """)
+print("Envoi de données de test...")
 
-    conn.commit()
-    conn.close()
-    print("[INFO] Tables created successfully.")
-
-def add_test_users():
-    conn = sqlite3.connect(DB)
-    cur = conn.cursor()
-
-    users = [
-        ("Alice", "alice@example.com", "+243810000001", "CNT-001"),
-        ("Bob", "bob@example.com", "+243810000002", "CNT-002"),
-        ("Charlie", "charlie@example.com", "+243810000003", "CNT-003")
-    ]
-
-    for name, email, phone, meter in users:
-        try:
-            cur.execute("INSERT INTO users (name, email, phone, meter_number) VALUES (?, ?, ?, ?)", 
-                        (name, email, phone, meter))
-        except sqlite3.IntegrityError:
-            print(f"[WARN] User {name} already exists.")
+# Envoyer des données de test
+for i in range(5):
+    consumption_data = {
+        "meter_number": METER_NUMBER,
+        "kwh": 0.25 + (i * 0.05),
+        "timestamp": datetime.now().isoformat()
+    }
     
-    conn.commit()
-    conn.close()
-    print("[INFO] Test users added successfully.")
+    client.publish(TOPIC_CONSUMPTION, json.dumps(consumption_data))
+    print(f"Donnée envoyée: {consumption_data}")
+    time.sleep(2)
 
-if __name__ == "__main__":
-    create_tables()
-    add_test_users()
+client.loop_stop()
+client.disconnect()

@@ -41,7 +41,7 @@ try:
         }
         client.publish(TOPIC_CONSUMPTION, json.dumps(message))
         print(f"[SENT] {message}")
-        time.sleep(60)  # envoie toutes les minutes
+        time.sleep(2)  # envoie toutes les minutes
 except KeyboardInterrupt:
     client.loop_stop()
     client.disconnect()
