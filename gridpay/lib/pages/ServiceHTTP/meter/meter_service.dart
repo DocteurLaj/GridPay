@@ -3,7 +3,8 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class MeterService {
-  static const String baseUrl = "http://10.0.2.2:5000";
+  static const String baseUrl =
+      "https://spidertric.pythonanywhere.com"; // "http://10.0.2.2:5000";
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
   Future<Map<String, String>> _getAuthHeaders() async {
@@ -36,7 +37,10 @@ class MeterService {
   }
 
   // Ajouter un nouveau compteur
-  Future<Map<String, dynamic>> addMeter(String meterNumber, {String meterName = ''}) async {
+  Future<Map<String, dynamic>> addMeter(
+    String meterNumber, {
+    String meterName = '',
+  }) async {
     try {
       final headers = await _getAuthHeaders();
       final response = await http.post(
@@ -50,7 +54,11 @@ class MeterService {
 
       if (response.statusCode == 201) {
         final data = json.decode(response.body);
-        return {'success': true, 'message': data['message'], 'meter': data['meter']};
+        return {
+          'success': true,
+          'message': data['message'],
+          'meter': data['meter'],
+        };
       } else {
         final error = json.decode(response.body);
         return {'success': false, 'message': error['message']};
@@ -61,11 +69,15 @@ class MeterService {
   }
 
   // Modifier un compteur
-  Future<Map<String, dynamic>> updateMeter(int meterId, {String? meterName, String? status}) async {
+  Future<Map<String, dynamic>> updateMeter(
+    int meterId, {
+    String? meterName,
+    String? status,
+  }) async {
     try {
       final headers = await _getAuthHeaders();
       final Map<String, dynamic> body = {};
-      
+
       if (meterName != null) body['meter_name'] = meterName;
       if (status != null) body['status'] = status;
 
@@ -77,7 +89,11 @@ class MeterService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        return {'success': true, 'message': data['message'], 'meter': data['meter']};
+        return {
+          'success': true,
+          'message': data['message'],
+          'meter': data['meter'],
+        };
       } else {
         final error = json.decode(response.body);
         return {'success': false, 'message': error['message']};

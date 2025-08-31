@@ -6,7 +6,7 @@ import 'package:gridpay/pages/auth/authService.dart';
 class ConsumptionService {
   final AuthService _authService = AuthService();
   static const String _baseUrl =
-      'http://10.0.2.2:5000'; // Remplacez par votre URL
+      'https://spidertric.pythonanywhere.com'; // Remplacez par votre URL
 
   // Récupérer la consommation cumulative pour un compteur spécifique
   Future<Map<String, dynamic>> getCumulativeConsumption(

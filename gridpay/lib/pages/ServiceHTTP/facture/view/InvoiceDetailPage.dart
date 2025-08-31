@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:gridpay/pages/ServiceHTTP/facture/view/InvoiceService.dart';
+import 'package:gridpay/pages/ServiceHTTP/facture/InvoiceService.dart';
+import 'package:gridpay/pages/ServiceHTTP/payment/paymentService.dart';
 import 'package:intl/intl.dart';
 
 class InvoiceDetailPage extends StatefulWidget {
@@ -13,6 +14,7 @@ class InvoiceDetailPage extends StatefulWidget {
 
 class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
   final InvoiceService _invoiceService = InvoiceService();
+  final PaymentService _paymentService = PaymentService();
   bool _isLoading = false;
   Map<String, dynamic>? _invoiceDetails;
 
@@ -273,6 +275,12 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
             child: ElevatedButton(
               onPressed: () {
                 _processPayment(invoice);
+                //Navigator.push(
+                //  context,
+                //  MaterialPageRoute(
+                //    builder: (context) => PaymentPage(invoice: invoice),
+                //  ),
+                //);
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blue,
@@ -305,6 +313,10 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
     );
   }
 
+  String _generateTransactionId() {
+    return 'TXN${DateTime.now().millisecondsSinceEpoch}';
+  }
+
   void _processPayment(Map<String, dynamic> invoice) {
     // Implémentez la logique de paiement ici
     showDialog(
@@ -325,26 +337,22 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
               });
 
               try {
-                final result = await _invoiceService.updateInvoiceStatus(
-                  invoice['id'],
-                  'paid',
+                final result = await _paymentService.addPayment(
+                  invoiceId: invoice['id']!,
+                  amount: invoice['amount'],
+                  paymentMethod: "Mobile money",
+                  transactionId: _generateTransactionId(),
                 );
 
                 if (result['success'] == true) {
+                  // Afficher un message de succès
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Payment processed successfully!'),
+                    SnackBar(
+                      content: Text(result['message']),
                       backgroundColor: Colors.green,
                     ),
                   );
-                  _loadInvoiceDetails(); // Rafraîchir les détails
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Error: ${result['message']}'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
+                  _loadInvoiceDetails();
                 }
               } catch (e) {
                 ScaffoldMessenger.of(context).showSnackBar(

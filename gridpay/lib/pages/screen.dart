@@ -9,9 +9,9 @@ import 'package:gridpay/pages/Settings/ProfilePage.dart';
 import 'package:gridpay/pages/Settings/SettingsPage.dart';
 import 'package:gridpay/pages/auth/authService.dart';
 import 'package:gridpay/pages/auth/login.dart'; // Import de la page de login
-import 'package:gridpay/pages/ServiceHTTP/facture/createInvoicePage.dart';
+import 'package:gridpay/pages/ServiceHTTP/facture/view/createInvoicePage.dart';
 import 'package:gridpay/pages/ServiceHTTP/facture/view/InvoicePage.dart';
-import 'package:gridpay/pages/ServiceHTTP/payment/PaymentHistoryPage.dart';
+import 'package:gridpay/pages/ServiceHTTP/payment/view/PaymentHistoryPage.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});

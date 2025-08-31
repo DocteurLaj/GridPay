@@ -33,7 +33,7 @@ class _CreateInvoicePageState extends State<CreateInvoicePage> {
   double _totalAmount = 0.0;
   int? _selectedMeterId;
   String _selectedMeterName = '';
-  String baseUrl = "http://10.0.2.2:5000";
+  String baseUrl = "https://spidertric.pythonanywhere.com";
 
   @override
   void initState() {

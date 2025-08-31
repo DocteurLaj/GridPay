@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class InvoiceService {
-  static const String baseUrl = "http://10.0.2.2:5000";
+  static const String baseUrl = "https://spidertric.pythonanywhere.com";
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
   Future<Map<String, String>> _getAuthHeaders() async {
@@ -35,7 +35,10 @@ class InvoiceService {
     }
   }
 
-  Future<Map<String, dynamic>> updateInvoiceStatus(int invoiceId, String status) async {
+  Future<Map<String, dynamic>> updateInvoiceStatus(
+    int invoiceId,
+    String status,
+  ) async {
     try {
       final headers = await _getAuthHeaders();
       final response = await http.put(
@@ -46,7 +49,11 @@ class InvoiceService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        return {'success': true, 'message': data['message'], 'invoice': data['invoice']};
+        return {
+          'success': true,
+          'message': data['message'],
+          'invoice': data['invoice'],
+        };
       } else {
         final error = json.decode(response.body);
         return {'success': false, 'message': error['message']};

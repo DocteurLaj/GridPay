@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:gridpay/pages/ServiceHTTP/facture/view/InvoiceDetailPage.dart';
-import 'package:gridpay/pages/ServiceHTTP/facture/view/InvoiceService.dart';
+import 'package:gridpay/pages/ServiceHTTP/facture/InvoiceService.dart';
 import 'package:intl/intl.dart';
 
 class InvoicePage extends StatefulWidget {
@@ -363,11 +363,11 @@ class _InvoicePageState extends State<InvoicePage> {
             // Ligne 1: Mois et consommation (dynamique)
             Row(
               children: [
-                _buildInfoItem(Icons.calendar_month, 'Period: $formattedMonth'),
-                const SizedBox(width: 16),
-                _buildInfoItem(Icons.bolt, 'Energy: $kwh kWh'),
+                _buildInfoItem(Icons.calendar_month, 'Date: $formattedMonth'),
               ],
             ),
+            const SizedBox(height: 8),
+            _buildInfoItem(Icons.bolt, 'Energy: $kwh kWh'),
 
             const SizedBox(height: 8),
 
