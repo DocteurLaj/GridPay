@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:gridpay/pages/ServiceHTTP/payement/paymentService.dart';
+import 'package:gridpay/pages/ServiceHTTP/payment/paymentService.dart';
 import 'package:intl/intl.dart';
 
 class PaymentHistoryPage extends StatefulWidget {

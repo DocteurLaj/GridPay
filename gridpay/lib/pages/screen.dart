@@ -1,11 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:gridpay/pages/ServiceHTTP/meter/ConsumptionService.dart';
 import 'package:gridpay/pages/ServiceHTTP/meter/meter_service.dart';
 import 'package:gridpay/pages/Settings/ProfilePage.dart';
 import 'package:gridpay/pages/auth/authService.dart';
 import 'package:gridpay/pages/auth/login.dart'; // Import de la page de login
 import 'package:gridpay/pages/ServiceHTTP/facture/createInvoicePage.dart';
 import 'package:gridpay/pages/ServiceHTTP/facture/view/InvoicePage.dart';
-import 'package:gridpay/pages/ServiceHTTP/payement/PaymentHistoryPage.dart';
+import 'package:gridpay/pages/ServiceHTTP/payment/PaymentHistoryPage.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -17,6 +20,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   final AuthService _authService = AuthService();
   final MeterService _meterService = MeterService();
+  final ConsumptionService _consumptionService = ConsumptionService();
 
   String? _userEmail;
   String? _userName;
@@ -27,12 +31,63 @@ class _HomePageState extends State<HomePage> {
   String? _errorMessage;
   bool _redirectingToLogin = false;
 
-  int _currentIndex = 0;
+  double _totalConsumption = 0.0;
+  List<Map<String, dynamic>> _meterConsumptions = [];
+  bool _isLoadingConsumption = false;
+
+  Timer? _consumptionTimer;
+
+  //int _currentIndex = 0;
 
   @override
   void initState() {
     super.initState();
     _loadUserData();
+    _startConsumptionTimer();
+  }
+
+  @override
+  void dispose() {
+    _consumptionTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startConsumptionTimer() {
+    _consumptionTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      if (_authToken != null) {
+        _loadConsumptionData();
+      }
+    });
+  }
+
+  Future<void> _loadConsumptionData() async {
+    if (_authToken == null) return;
+
+    setState(() {
+      _isLoadingConsumption = true;
+    });
+
+    try {
+      final result = await _consumptionService.getAllCumulativeConsumptions();
+
+      if (result['success'] == true) {
+        setState(() {
+          _meterConsumptions = List<Map<String, dynamic>>.from(
+            result['data'] ?? [],
+          );
+          _totalConsumption =
+              (result['total_consumption'] as num?)?.toDouble() ?? 0.0;
+        });
+      } else {
+        print('Error loading consumption: ${result['message']}');
+      }
+    } catch (e) {
+      print('Error in loadConsumptionData: $e');
+    } finally {
+      setState(() {
+        _isLoadingConsumption = false;
+      });
+    }
   }
 
   Future<void> _loadUserData() async {
@@ -52,6 +107,9 @@ class _HomePageState extends State<HomePage> {
       final email = await _authService.getEmail();
       final userName = await _authService.getName();
       final userPhone = await _authService.getPhone();
+
+      await _loadUserMeters();
+      await _loadConsumptionData(); // ← AJOUTEZ CET APPEL
 
       print(
         'User data loaded: email=$email, name=$userName, phone=$userPhone, token=exists',
@@ -313,7 +371,6 @@ class _HomePageState extends State<HomePage> {
                     context,
                     MaterialPageRoute(builder: (context) => ProfilePage()),
                   );
-                  // Ajoutez votre logique de paiement ici
                 },
                 child: Container(
                   width: 50,
@@ -333,64 +390,146 @@ class _HomePageState extends State<HomePage> {
             ],
           ),
           const SizedBox(height: 24),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.blue.shade800.withOpacity(0.6),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.account_balance_wallet,
-                  color: Colors.white,
-                  size: 32,
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Current Balance',
-                        style: TextStyle(
-                          color: Colors.grey.shade300,
-                          fontSize: 14,
-                        ),
-                      ),
-                      const Text(
-                        '\$12,450.00',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    '+15%',
-                    style: TextStyle(
-                      color: Colors.green.shade300,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+          _buildConsumptionCard(),
         ],
       ),
+    );
+  }
+
+  Widget _buildConsumptionCard() {
+    if (_isLoadingConsumption) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.blue.shade800.withOpacity(0.6),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: const Row(
+          children: [
+            CircularProgressIndicator(color: Colors.white),
+            SizedBox(width: 16),
+            Text(
+              'Loading consumption...',
+              style: TextStyle(color: Colors.white),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade800.withOpacity(0.6),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        children: [
+          // Affichage pour un seul compteur
+          if (_meterConsumptions.length == 1)
+            _buildSingleMeterConsumption(_meterConsumptions[0]),
+
+          // Affichage pour plusieurs compteurs
+          if (_meterConsumptions.length > 1) _buildMultipleMetersConsumption(),
+
+          // Aucun compteur
+          if (_meterConsumptions.isEmpty) _buildNoMetersConsumption(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSingleMeterConsumption(Map<String, dynamic> consumption) {
+    final double consumptionValue =
+        (consumption['cumulative_consumption'] as num).toDouble();
+
+    return Row(
+      children: [
+        const Icon(Icons.gas_meter, color: Colors.white, size: 32),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${consumption['meter_name']} Consumption',
+                style: TextStyle(color: Colors.grey.shade300, fontSize: 14),
+              ),
+              Text(
+                '${consumptionValue.toStringAsFixed(2)} kWh',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.green.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text(
+            '+15%',
+            style: TextStyle(
+              color: Colors.green.shade300,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMultipleMetersConsumption() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Row(
+          children: [
+            Icon(Icons.gas_meter, color: Colors.white, size: 32),
+            SizedBox(width: 16),
+            Text(
+              'Total Consumption',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          '${_totalConsumption.toStringAsFixed(2)} kWh',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Across ${_meterConsumptions.length} meters',
+          style: TextStyle(color: Colors.grey.shade300, fontSize: 12),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNoMetersConsumption() {
+    return const Row(
+      children: [
+        Icon(Icons.gas_meter, color: Colors.white, size: 32),
+        SizedBox(width: 16),
+        Text(
+          'No meters available',
+          style: TextStyle(color: Colors.white, fontSize: 16),
+        ),
+      ],
     );
   }
 

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:gridpay/pages/ServiceHTTP/meter/meters_page.dart';
+import 'package:gridpay/pages/ServiceHTTP/meter/view/meters_page.dart';
 import 'package:gridpay/pages/auth/authService.dart';
 
 class ProfilePage extends StatefulWidget {
