@@ -3,7 +3,7 @@ import 'package:gridpay/pages/ServiceHTTP/meter/view/meters_page.dart';
 import 'package:gridpay/pages/auth/authService.dart';
 
 class ProfilePage extends StatefulWidget {
-  ProfilePage({super.key});
+  const ProfilePage({super.key});
 
   @override
   State<ProfilePage> createState() => _ProfilePageState();
@@ -43,6 +43,7 @@ class _ProfilePageState extends State<ProfilePage> {
     });
   }
 
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0A0A0A),

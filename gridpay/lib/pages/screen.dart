@@ -1,9 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:gridpay/pages/%20EnergyUsage/%20EnergyUsagePage.dart';
+import 'package:gridpay/pages/Reports/ReportPage.dart';
 import 'package:gridpay/pages/ServiceHTTP/meter/ConsumptionService.dart';
 import 'package:gridpay/pages/ServiceHTTP/meter/meter_service.dart';
 import 'package:gridpay/pages/Settings/ProfilePage.dart';
+import 'package:gridpay/pages/Settings/SettingsPage.dart';
 import 'package:gridpay/pages/auth/authService.dart';
 import 'package:gridpay/pages/auth/login.dart'; // Import de la page de login
 import 'package:gridpay/pages/ServiceHTTP/facture/createInvoicePage.dart';
@@ -44,6 +47,9 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     _loadUserData();
     _startConsumptionTimer();
+    setState(() {
+      _isLoadingConsumption = true;
+    });
   }
 
   @override
@@ -53,7 +59,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _startConsumptionTimer() {
-    _consumptionTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+    _consumptionTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
       if (_authToken != null) {
         _loadConsumptionData();
       }
@@ -63,9 +69,9 @@ class _HomePageState extends State<HomePage> {
   Future<void> _loadConsumptionData() async {
     if (_authToken == null) return;
 
-    setState(() {
-      _isLoadingConsumption = true;
-    });
+    //setState(() {
+    //  _isLoadingConsumption = true;
+    //});
 
     try {
       final result = await _consumptionService.getAllCumulativeConsumptions();
@@ -569,19 +575,34 @@ class _HomePageState extends State<HomePage> {
         'icon': Icons.analytics,
         'title': 'Reports',
         'color': Colors.purple,
-        'onTap': () {},
+        'onTap': () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => ReportsPage()),
+          );
+        },
       },
       {
         'icon': Icons.bolt,
         'title': 'Energy Usage',
         'color': Colors.red,
-        'onTap': () {},
+        'onTap': () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => EnergyUsagePage()),
+          );
+        },
       },
       {
         'icon': Icons.settings,
         'title': 'Settings',
         'color': Colors.grey,
-        'onTap': () {},
+        'onTap': () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => SettingsPage()),
+          );
+        },
       },
     ];
 
