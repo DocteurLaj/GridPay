@@ -4,19 +4,19 @@ import json
 import random
 import paho.mqtt.client as mqtt
 
-# === Configuration Broker MQTT ===
+# === Conf Broker MQTT ===
 BROKER = "broker.hivemq.com"  
 PORT = 1883
-METER_NUMBER =  "CNT-452-568-985"
+METER_NUMBER = "CNT-452-999"
 
 # === Topics MQTT ===
 TOPIC_CONSUMPTION = f"electricity/{METER_NUMBER}/consumption"
 TOPIC_RELAY = f"electricity/{METER_NUMBER}/relay"
 
-# === État du relais (par défaut OFF) ===
+# === relais (par default OFF) ===
 relay_state = True
 
-# === Callback : quand le capteur reçoit un message (commande ON/OFF) ===
+# === Callback : (command ON/OFF) ===
 def on_message(client, userdata, msg):
     global relay_state
     payload = msg.payload.decode()
@@ -34,7 +34,7 @@ def on_message(client, userdata, msg):
     except Exception as e:
         print(f"[ERROR] Impossible de décoder le message: {payload}, Erreur: {e}")
 
-# === Configuration du client MQTT ===
+# === Conf client MQTT ===
 client = mqtt.Client()
 client.on_message = on_message
 
@@ -46,10 +46,10 @@ client.subscribe(TOPIC_RELAY)
 print("[INFO] Sensor simulator started...")
 print("[INFO] Relais par défaut = OFF (aucune donnée envoyée tant que ON n’est pas reçu)")
 
-# === Boucle de simulation ===
+# === Loup simulation ===
 try:
     while True:
-        if relay_state:  # envoi uniquement si relais activé
+        if relay_state:  #  if relais activé
             kwh = round(random.uniform(0.1, 0.3), 2)
             message = {
                 "meter_number": METER_NUMBER,
@@ -61,7 +61,7 @@ try:
         else:
             print("[INFO] Relais OFF - aucune donnée envoyée")
 
-        time.sleep(2)  # toutes les 2 secondes
+        time.sleep(2)  # all 2 second
 
 except KeyboardInterrupt:
     print("\n[INFO] Arrêt du simulateur...")

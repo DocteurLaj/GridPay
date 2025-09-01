@@ -1,0 +1,4 @@
+flask==2.3.3
+flask-jwt-extended==4.5.3
+flask-bcrypt==1.0.1
+paho-mqtt==1.6.1'''DE

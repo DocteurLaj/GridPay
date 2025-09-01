@@ -18,14 +18,12 @@ jwt = JWTManager(app)
 bcrypt = Bcrypt(app)
 
 
-# Configuration MQTT
 BROKER = "broker.hivemq.com"
-PORT = 1883
-# On ne définit plus de METER_NUMBER fixe
-
-# Variables globales pour les topics
-mqtt_topics = []
+PORT = 8884  # TLS sécurisé
 mqtt_client = None
+mqtt_topics = []
+
+
 
 #-----------------------------------------------------------------------------------------------
 #                                  INITIALISATION BASE DE DONNÉES                                      
@@ -913,11 +911,10 @@ def get_meter_invoices(meter_id):
 #------------------------------------------------------------------------------------------------
 #                                      GESTION DES PAIEMENTS
 #------------------------------------------------------------------------------------------------
-
 @app.route('/payments', methods=['POST'])
 @jwt_required()
 def add_payment():
-    """Ajoute un nouveau paiement pour une facture"""
+    """Ajoute un nouveau paiement pour une facture et envoie la commande ON"""
     try:
         user_email = get_jwt_identity()
         data = request.get_json()
@@ -937,9 +934,9 @@ def add_payment():
         conn = sqlite3.connect('gridpay.db')
         cursor = conn.cursor()
         
-        # Vérifier que la facture appartient à l'utilisateur
+        # Vérifier que la facture appartient à l'utilisateur et récupérer les infos
         cursor.execute("""
-            SELECT i.id, i.amount, i.status
+            SELECT i.id, i.amount, i.status, i.meter_id, m.meter_number
             FROM invoices i
             JOIN meters m ON i.meter_id = m.id
             JOIN users u ON m.user_id = u.id
@@ -952,7 +949,7 @@ def add_payment():
             conn.close()
             return jsonify({'message': 'Facture non trouvée ou accès non autorisé'}), 404
         
-        invoice_db_id, invoice_amount, invoice_status = invoice
+        invoice_db_id, invoice_amount, invoice_status, meter_id, meter_number = invoice
         
         # Vérifier que le montant du paiement est valide
         if float(amount) <= 0:
@@ -973,10 +970,10 @@ def add_payment():
         """, (invoice_id, amount, payment_method, transaction_id))
         
         # Mettre à jour le statut de la facture si le paiement est complet
+        payment_complete = False
         if float(amount) >= float(invoice_amount):
-            cursor.execute("""
-                UPDATE invoices SET status = 'paid' WHERE id = ?
-            """, (invoice_id,))
+            cursor.execute("UPDATE invoices SET status = 'paid' WHERE id = ?", (invoice_id,))
+            payment_complete = True
         
         conn.commit()
         
@@ -991,7 +988,21 @@ def add_payment():
         """, (cursor.lastrowid,))
         
         new_payment = cursor.fetchone()
+        
+        # ----------------------------------------------------------------
+        # ENVOI DE LA COMMANDE ON AU BROKER MQTT SI PAIEMENT COMPLET
+        # ----------------------------------------------------------------
+        command_sent = False
+        if payment_complete and meter_number:
+            command = "ON"
+            if send_mqtt_command(meter_number, command):
+                print(f"[PAYMENT] Commande {command} envoyée pour le compteur {meter_number}")
+                command_sent = True
+            else:
+                print(f"[PAYMENT ERROR] Échec envoi commande pour {meter_number}")
+        
         conn.close()
+        # ----------------------------------------------------------------
         
         if new_payment:
             return jsonify({
@@ -1005,7 +1016,9 @@ def add_payment():
                     'status': new_payment[5],
                     'paid_at': new_payment[6],
                     'invoice_amount': new_payment[7]
-                }
+                },
+                'command_sent': command_sent,
+                'meter_number': meter_number if command_sent else None
             }), 201
         else:
             return jsonify({'message': 'Paiement créé mais erreur de récupération'}), 201
@@ -1162,154 +1175,317 @@ def get_payment(payment_id):
             
     except Exception as e:
         return jsonify({'message': f'Erreur serveur: {str(e)}'}), 500
-
-
-#-----------------------------------------------------------------------------------------------
-#                                  INITIALISATION MQTT                                      
-# ---------------------------------------------------------------------------------------------
-
-def meter_exists(meter_number):
-    conn = sqlite3.connect('gridpay.db')
-    cursor = conn.cursor()
-    cursor.execute("SELECT id FROM meters WHERE meter_number = ?", (meter_number,))
-    exists = cursor.fetchone() is not None
-    conn.close()
-    return exists
-
-def on_connect(client, userdata, flags, rc):
-    if rc == 0:
-        print("[MQTT] Connecté au broker avec succès")
-        # S'abonner à tous les topics de l'utilisateur
-        for topic in mqtt_topics:
-            client.subscribe(topic)
-            print(f"[MQTT] Abonné au topic: {topic}")
-    else:
-        print(f"[MQTT] Erreur de connexion: {rc}")
-
-def on_message(client, userdata, msg):
-    """Callback quand on reçoit des données de consommation MQTT"""
-    try:
-        payload = msg.payload.decode()
-        data = json.loads(payload)
-        
-        # Extraire le numéro de compteur du topic
-        topic_parts = msg.topic.split('/')
-        if len(topic_parts) >= 2:
-            meter_number = topic_parts[1]  # electricity/{meter_number}/consumption
-            data['meter_number'] = meter_number
-        
-        print(f"[MQTT] Données reçues sur {msg.topic}: {data}")
-        
-        # Traiter les données de consommation
-        process_consumption_data(data)
-        
-    except Exception as e:
-        print(f"[MQTT ERROR] Erreur traitement: {e}")
-
+# -----------------------------------------------------------------------------------------------
+# Traitement consommation avec vérification de seuil (sans modification de base)
+# -----------------------------------------------------------------------------------------------
 def process_consumption_data(data):
-    """Traite les données de consommation et les stocke en base"""
+    """Traite les données de consommation et vérifie le seuil pour coupure automatique"""
     try:
         meter_number = data.get('meter_number')
         kwh = data.get('kwh', 0)
         
         # Vérifications initiales
         if not meter_number:
-            print("[DB ERROR] Numéro de compteur manquant dans les données")
+            print("[MQTT ERROR] Numéro de compteur manquant dans les données")
             return
         
-        # Convertir en float
-        consumption = float(kwh)
-        
-        # Vérifier que le compteur existe avant d'ajouter
-        if not meter_exists(meter_number):
-            print(f"[WARNING] Compteur {meter_number} reçu via MQTT mais non trouvé en base")
+        if not kwh:
+            print("[MQTT ERROR] Valeur de consommation manquante")
             return
         
-        # Ajouter la consommation de manière cumulative
-        add_consumption(meter_number, consumption)
-        
-        print(f"[DB] Consommation ajoutée pour {meter_number}: {consumption}kWh")
-        
-    except ValueError:
-        print(f"[DB ERROR] Valeur de consommation invalide: {kwh}")
-    except Exception as e:
-        print(f"[DB ERROR] Erreur traitement données: {e}")
-
-
-def init_mqtt(topics):
-    """Initialise et connecte le client MQTT avec une liste de topics"""
-    global mqtt_client, mqtt_topics
-    
-    mqtt_topics = topics
-    
-    try:
-        if mqtt_client:
-            mqtt_client.loop_stop()
-            mqtt_client.disconnect()
-        
-        mqtt_client = mqtt.Client()
-        mqtt_client.on_connect = on_connect
-        mqtt_client.on_message = on_message
-        
-        print(f"[MQTT] Connexion au broker pour {len(topics)} topics...")
-        mqtt_client.connect(BROKER, PORT)
-        mqtt_client.loop_start()
-        
-    except Exception as e:
-        print(f"[MQTT ERROR] Erreur initialisation: {e}")
-
-def send_mqtt_command(meter_number, command):
-    """Envoie une commande ON/OFF via MQTT pour un compteur spécifique"""
-    global mqtt_client
-    
-    if mqtt_client:
+        # Convertir en float avec validation
         try:
-            topic = f"electricity/{meter_number}/relay"
-            message = {"command": command}
-            mqtt_client.publish(topic, json.dumps(message))
-            print(f"[MQTT] Commande {command} envoyée sur {topic}")
-            return True
-        except Exception as e:
-            print(f"[MQTT ERROR] Erreur envoi commande: {e}")
-            return False
-    else:
-        print("[MQTT ERROR] Client MQTT non initialisé")
-        return False
+            consumption = float(kwh)
+            if consumption < 0:
+                print(f"[MQTT ERROR] Consommation négative: {consumption}kWh")
+                return
+        except ValueError:
+            print(f"[MQTT ERROR] Valeur de consommation invalide: {kwh}")
+            return
+        
+        # Vérifier que le compteur existe ET appartient à un utilisateur actif
+        if not is_valid_meter(meter_number):
+            print(f"[MQTT WARNING] Compteur {meter_number} invalide ou inactif")
+            return
+        
+        # Récupérer la consommation actuelle
+        conn = sqlite3.connect('gridpay.db')
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT cumulative_consumption 
+            FROM meters 
+            WHERE meter_number = ?
+        """, (meter_number,))
+        
+        result = cursor.fetchone()
+        
+        if not result:
+            conn.close()
+            print(f"[MQTT ERROR] Compteur {meter_number} non trouvé")
+            return
+        
+        current_cumulative = result[0]
+        new_cumulative = current_cumulative + consumption
+        
+        # Mettre à jour la consommation cumulative
+        cursor.execute("""
+            UPDATE meters 
+            SET cumulative_consumption = ?, 
+                updated_at = CURRENT_TIMESTAMP
+            WHERE meter_number = ?
+        """, (new_cumulative, meter_number))
+        
+        conn.commit()
+        conn.close()
+        
+        print(f"[MQTT SUCCESS] Consommation enregistrée pour {meter_number}: {consumption}kWh, Total: {new_cumulative}kWh")
+        
+        # -----------------------------------------------------------------
+        # VÉRIFICATION MANUELLE DU SEUIL (sans colonne energy_threshold)
+        # On utilise un seuil fixe ou on récupère depuis les factures
+        # -----------------------------------------------------------------
+        energy_threshold = get_energy_threshold_for_meter(meter_number)
+        
+        if energy_threshold is not None and new_cumulative >= energy_threshold:
+            print(f"[MQTT ALERT] Seuil atteint pour {meter_number}: {new_cumulative}/{energy_threshold}kWh")
+            
+            # Envoyer la commande OFF
+            if send_mqtt_command(meter_number, "OFF"):
+                print(f"[MQTT] Commande OFF envoyée automatiquement pour {meter_number}")
+            else:
+                print(f"[MQTT ERROR] Échec envoi commande OFF pour {meter_number}")
+        
+    except Exception as e:
+        print(f"[MQTT ERROR] Erreur traitement données: {e}")
+
+def get_energy_threshold_for_meter(meter_number):
+    """Détermine le seuil d'énergie pour un compteur"""
+    try:
+        conn = sqlite3.connect('gridpay.db')
+        cursor = conn.cursor()
+        
+        # Méthode 1: Récupérer depuis la dernière facture payée
+        cursor.execute("""
+            SELECT i.kwh 
+            FROM invoices i
+            JOIN meters m ON i.meter_id = m.id
+            WHERE m.meter_number = ? AND i.status = 'paid'
+            ORDER BY i.issued_at DESC
+            LIMIT 1
+        """, (meter_number,))
+        
+        result = cursor.fetchone()
+        conn.close()
+        
+        if result:
+            # Utiliser le kwh de la dernière facture payée comme seuil
+            return float(result[0])
+        else:
+            # Méthode 2: Seuil par défaut (100 kWh)
+            return 100.0
+            
+    except Exception as e:
+        print(f"[THRESHOLD ERROR] Erreur récupération seuil: {e}")
+        return 100.0  # Seuil par défaut en cas d'erreur
     
+
+
+# -----------------------------------------------------------------------------------------------
+# Gestion des seuils d'énergie sans modification de la structure
+# -----------------------------------------------------------------------------------------------
+
+@app.route('/api/meters/<string:meter_number>/check_threshold', methods=['GET'])
+@jwt_required()
+def check_energy_threshold(meter_number):
+    """Vérifie si la consommation a atteint le seuil"""
+    try:
+        user_email = get_jwt_identity()
+        
+        conn = sqlite3.connect('gridpay.db')
+        cursor = conn.cursor()
+        
+        # Vérifier que le compteur appartient à l'utilisateur
+        cursor.execute("""
+            SELECT m.id 
+            FROM meters m
+            JOIN users u ON m.user_id = u.id
+            WHERE m.meter_number = ? AND u.email = ?
+        """, (meter_number, user_email))
+        
+        if not cursor.fetchone():
+            conn.close()
+            return jsonify({'message': 'Compteur non trouvé ou accès non autorisé'}), 404
+        
+        # Récupérer la consommation cumulative
+        cursor.execute("""
+            SELECT cumulative_consumption 
+            FROM meters 
+            WHERE meter_number = ?
+        """, (meter_number,))
+        
+        result = cursor.fetchone()
+        
+        if not result:
+            conn.close()
+            return jsonify({'message': 'Erreur récupération consommation'}), 500
+        
+        current_consumption = result[0]
+        energy_threshold = get_energy_threshold_for_meter(meter_number)
+        
+        conn.close()
+        
+        threshold_reached = current_consumption >= energy_threshold
+        
+        return jsonify({
+            'meter_number': meter_number,
+            'current_consumption': current_consumption,
+            'energy_threshold': energy_threshold,
+            'threshold_reached': threshold_reached,
+            'remaining': energy_threshold - current_consumption if not threshold_reached else 0
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'message': f'Erreur serveur: {str(e)}'}), 500
+
+@app.route('/api/meters/<string:meter_number>/send_command', methods=['POST'])
+@jwt_required()
+def send_meter_command():
+    """Envoie une commande manuelle au compteur"""
+    try:
+        user_email = get_jwt_identity()
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'message': 'Données JSON requises'}), 400
+        
+        meter_number = data.get('meter_number')
+        command = data.get('command')
+        
+        if not meter_number or not command:
+            return jsonify({'message': 'Numéro de compteur et commande requis'}), 400
+        
+        if command not in ['ON', 'OFF']:
+            return jsonify({'message': 'Commande invalide. Utilisez ON ou OFF'}), 400
+        
+        conn = sqlite3.connect('gridpay.db')
+        cursor = conn.cursor()
+        
+        # Vérifier que le compteur appartient à l'utilisateur
+        cursor.execute("""
+            SELECT m.id 
+            FROM meters m
+            JOIN users u ON m.user_id = u.id
+            WHERE m.meter_number = ? AND u.email = ?
+        """, (meter_number, user_email))
+        
+        if not cursor.fetchone():
+            conn.close()
+            return jsonify({'message': 'Compteur non trouvé ou accès non autorisé'}), 404
+        
+        conn.close()
+        
+        # Envoyer la commande MQTT
+        if send_mqtt_command(meter_number, command):
+            # Si commande ON, réinitialiser la consommation cumulative
+            if command == "ON":
+                reset_cumulative_consumption(meter_number)
+            
+            return jsonify({
+                'message': f'Commande {command} envoyée avec succès',
+                'meter_number': meter_number
+            }), 200
+        else:
+            return jsonify({'message': 'Erreur lors de l\'envoi de la commande'}), 500
+            
+    except Exception as e:
+        return jsonify({'message': f'Erreur serveur: {str(e)}'}), 500
+
+def reset_cumulative_consumption(meter_number):
+    """Réinitialise la consommation cumulative d'un compteur"""
+    try:
+        conn = sqlite3.connect('gridpay.db')
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            UPDATE meters 
+            SET cumulative_consumption = 0.0 
+            WHERE meter_number = ?
+        """, (meter_number,))
+        
+        conn.commit()
+        conn.close()
+        print(f"[DB] Consommation réinitialisée pour {meter_number}")
+        
+    except Exception as e:
+        print(f"[DB ERROR] Erreur réinitialisation consommation: {e}")
+
+
+
+
+
+
+
 
 
 #-----------------------------------------------------------------------------------------------
 #                                  FONCTIONS DE GESTION DE CONSOMMATION                                      
 # ---------------------------------------------------------------------------------------------
-
+def is_valid_meter(meter_number):
+    """Vérifie si le compteur existe ET est actif"""
+    try:
+        conn = sqlite3.connect('gridpay.db')
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, status 
+            FROM meters 
+            WHERE meter_number = ? AND status = 'active'
+        """, (meter_number,))
+        
+        exists = cursor.fetchone() is not None
+        conn.close()
+        return exists
+        
+    except Exception as e:
+        print(f"[DB ERROR] Erreur vérification compteur: {e}")
+        return False
+    
 def add_consumption(meter_number, consumption):
-    """Ajoute de la consommation de manière cumulative pour un compteur"""
+    """Ajoute de la consommation de manière cumulative pour un compteur EXISTANT"""
     try:
         conn = sqlite3.connect('gridpay.db')
         cursor = conn.cursor()
         
-        # Vérifier si le compteur existe
-        cursor.execute("SELECT id, cumulative_consumption FROM meters WHERE meter_number = ?", (meter_number,))
-        meter = cursor.fetchone()
+        cursor.execute("SELECT cumulative_consumption FROM meters WHERE meter_number = ?", (meter_number,))
+        result = cursor.fetchone()
         
-        if meter:
-            meter_id, current_cumulative = meter
-            new_cumulative = current_cumulative + consumption
-            
-            # Mettre à jour la consommation cumulative
-            cursor.execute("""
-                UPDATE meters 
-                SET cumulative_consumption = ?, 
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE meter_number = ?
-            """, (new_cumulative, meter_number))
-            
-            conn.commit()
-            print(f"[DB] Consommation ajoutée: {consumption}kWh, Total cumulative: {new_cumulative}kWh")
-        else:
-            print(f"[DB WARNING] Compteur {meter_number} non trouvé dans la base de données")
+        if not result:
+            conn.close()
+            print(f"[DB ERROR] Compteur {meter_number} non trouvé lors de l'ajout")
+            return False
         
+        current_cumulative = result[0]
+        new_cumulative = current_cumulative + consumption
+        
+        # Mettre à jour la consommation cumulative
+        cursor.execute("""
+            UPDATE meters 
+            SET cumulative_consumption = ?, 
+                updated_at = CURRENT_TIMESTAMP
+            WHERE meter_number = ?
+        """, (new_cumulative, meter_number))
+        
+        conn.commit()
         conn.close()
+        
+        print(f"[DB] Consommation ajoutée pour {meter_number}: {consumption}kWh, Total: {new_cumulative}kWh")
+        
+        # Vérifier automatiquement le seuil après chaque ajout
+        energy_threshold = get_energy_threshold_for_meter(meter_number)
+        if new_cumulative >= energy_threshold:
+            print(f"[THRESHOLD] Seuil atteint! Envoi commande OFF pour {meter_number}")
+            send_mqtt_command(meter_number, "OFF")
+        
         return True
         
     except Exception as e:
@@ -1339,7 +1515,147 @@ def get_cumulative_consumption(meter_number):
     except Exception as e:
         print(f"[DB ERROR] Erreur récupération consommation: {e}")
         return None
+#-----------------------------------------------------------------------------------------------
+#                                  INITIALISATION MQTT                                      
+# ---------------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------------------------
+# Vérifier si un compteur existe en base
+# -----------------------------------------------------------------------------------------------
+def meter_exists(meter_number):
+    conn = sqlite3.connect('gridpay.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM meters WHERE meter_number = ?", (meter_number,))
+    exists = cursor.fetchone() is not None
+    conn.close()
+    return exists
 
+
+# -----------------------------------------------------------------------------------------------
+# Callbacks MQTT
+# -----------------------------------------------------------------------------------------------
+def on_connect(client, userdata, flags, rc):
+    if rc == 0:
+        print("[MQTT] Connecté au broker avec succès")
+        for topic in mqtt_topics:
+            client.subscribe(topic)
+            print(f"[MQTT] Abonné au topic: {topic}")
+    else:
+        print(f"[MQTT] Erreur de connexion: {rc}")
+
+
+def on_message(client, userdata, msg):
+    """Callback quand on reçoit des données de consommation MQTT"""
+    try:
+        payload = msg.payload.decode()
+        data = json.loads(payload)
+
+        # Extraire le numéro de compteur du topic
+        topic_parts = msg.topic.split('/')
+        if len(topic_parts) >= 2:
+            meter_number = topic_parts[1]  # electricity/{meter_number}/consumption
+            data['meter_number'] = meter_number
+
+        print(f"[MQTT] Données reçues sur {msg.topic}: {data}")
+
+        # Traiter les données de consommation
+        process_consumption_data(data)
+
+    except Exception as e:
+        print(f"[MQTT ERROR] Erreur traitement: {e}")
+
+
+# -----------------------------------------------------------------------------------------------
+# Traitement consommation
+# -----------------------------------------------------------------------------------------------
+def process_consumption_data(data):
+    """Traite les données de consommation et les stocke en base"""
+    try:
+        meter_number = data.get('meter_number')
+        kwh = data.get('kwh', 0)
+        
+        # Vérifications initiales
+        if not meter_number:
+            print("[MQTT ERROR] Numéro de compteur manquant dans les données")
+            return
+        
+        if not kwh:
+            print("[MQTT ERROR] Valeur de consommation manquante")
+            return
+        
+        # Convertir en float avec validation
+        try:
+            consumption = float(kwh)
+            if consumption < 0:
+                print(f"[MQTT ERROR] Consommation négative: {consumption}kWh")
+                return
+        except ValueError:
+            print(f"[MQTT ERROR] Valeur de consommation invalide: {kwh}")
+            return
+        
+        # ➡️ Vérifier que le compteur existe ET appartient à un utilisateur actif
+        if not is_valid_meter(meter_number):
+
+            print(f"[MQTT WARNING] Compteur {meter_number} invalide ou inactif")
+            return
+        
+        # ➡️ Ajouter la consommation (sans re-vérification)
+        if add_consumption(meter_number, consumption):
+            print(f"[MQTT SUCCESS] Consommation enregistrée pour {meter_number}: {consumption}kWh")
+        else:
+            print(f"[MQTT ERROR] Échec enregistrement pour {meter_number}")
+        
+    except Exception as e:
+        print(f"[MQTT ERROR] Erreur traitement données: {e}")
+
+# -----------------------------------------------------------------------------------------------
+# Initialisation MQTT
+# -----------------------------------------------------------------------------------------------
+def init_mqtt(topics):
+    """Initialise et connecte le client MQTT avec une liste de topics"""
+    global mqtt_client, mqtt_topics
+
+    mqtt_topics = topics
+
+    try:
+        if mqtt_client:
+            mqtt_client.loop_stop()
+            mqtt_client.disconnect()
+
+        mqtt_client = mqtt.Client(transport="websockets")
+        mqtt_client.on_connect = on_connect
+        mqtt_client.on_message = on_message
+
+        # Activer TLS obligatoire pour PythonAnywhere (seuls 443/8883/8884 sortent)
+        mqtt_client.tls_set()
+
+        print(f"[MQTT] Connexion au broker {BROKER}:{PORT} pour {len(topics)} topics...")
+        mqtt_client.connect(BROKER, PORT, 60)
+        mqtt_client.loop_start()
+
+    except Exception as e:
+        print(f"[MQTT ERROR] Erreur initialisation: {e}")
+
+
+# -----------------------------------------------------------------------------------------------
+# Envoi de commandes (ON/OFF)
+# -----------------------------------------------------------------------------------------------
+def send_mqtt_command(meter_number, command):
+    """Envoie une commande ON/OFF via MQTT pour un compteur spécifique"""
+    global mqtt_client
+
+    if mqtt_client:
+        try:
+            topic = f"electricity/{meter_number}/relay"
+            message = {"command": command}
+            mqtt_client.publish(topic, json.dumps(message))
+            print(f"[MQTT] Commande {command} envoyée sur {topic}")
+            return True
+        except Exception as e:
+            print(f"[MQTT ERROR] Erreur envoi commande: {e}")
+            return False
+    else:
+        print("[MQTT ERROR] Client MQTT non initialisé")
+        return False
 
 #-----------------------------------------------------------------------------------------------
 #                                  ROUTES API                                      
@@ -1595,4 +1911,4 @@ if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
 
 #if __name__ == '__main__':
-#    app.run(debug=True)
+#    app.run(debug=True) [SENT]
