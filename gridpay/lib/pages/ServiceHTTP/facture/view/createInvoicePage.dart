@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gridpay/pages/ServiceHTTP/url_config.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:intl/intl.dart';
@@ -33,7 +34,8 @@ class _CreateInvoicePageState extends State<CreateInvoicePage> {
   double _totalAmount = 0.0;
   int? _selectedMeterId;
   String _selectedMeterName = '';
-  String baseUrl = "https://spidertric.pythonanywhere.com";
+  String baseUrl =
+      globalBaseUrl; //"http://10.0.2.2:5000"; //"https://spidertric.pythonanywhere.com";
 
   @override
   void initState() {

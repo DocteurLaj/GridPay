@@ -324,7 +324,7 @@ class _HomePageState extends State<HomePage> {
               _buildHeaderSection(),
               _buildQuickActions(context),
               _buildRecentActivitySection(),
-              _buildStatisticsSection(),
+              // _buildStatisticsSection(),
               const SizedBox(height: 32),
             ],
           ),
@@ -479,7 +479,7 @@ class _HomePageState extends State<HomePage> {
             borderRadius: BorderRadius.circular(20),
           ),
           child: Text(
-            '+15%',
+            'Meter',
             style: TextStyle(
               color: Colors.green.shade300,
               fontWeight: FontWeight.w600,

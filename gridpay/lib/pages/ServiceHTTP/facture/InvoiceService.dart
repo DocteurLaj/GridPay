@@ -1,10 +1,12 @@
 // invoice_service.dart
 import 'dart:convert';
+import 'package:gridpay/pages/ServiceHTTP/url_config.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class InvoiceService {
-  static const String baseUrl = "https://spidertric.pythonanywhere.com";
+  static const String baseUrl =
+      globalBaseUrl; // "http://10.0.2.2:5000"; // "https://spidertric.pythonanywhere.com";
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
   Future<Map<String, String>> _getAuthHeaders() async {

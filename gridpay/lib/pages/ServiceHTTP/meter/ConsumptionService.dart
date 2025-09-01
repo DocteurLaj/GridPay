@@ -1,12 +1,13 @@
 // lib/pages/ServiceHTTP/consumption/consumption_service.dart
 import 'dart:convert';
+import 'package:gridpay/pages/ServiceHTTP/url_config.dart';
 import 'package:http/http.dart' as http;
 import 'package:gridpay/pages/auth/authService.dart';
 
 class ConsumptionService {
   final AuthService _authService = AuthService();
-  static const String _baseUrl =
-      'https://spidertric.pythonanywhere.com'; // Remplacez par votre URL
+  static const String _baseUrl = globalBaseUrl; // "http://10.0.2.2:5000";
+  // 'https://spidertric.pythonanywhere.com'; // Remplacez par votre URL
 
   // Récupérer la consommation cumulative pour un compteur spécifique
   Future<Map<String, dynamic>> getCumulativeConsumption(

@@ -85,7 +85,6 @@ class _ProfilePageState extends State<ProfilePage> {
                       Icons.email,
                     ),
                     _buildInfoItem('Phone', '+$_userPhone', Icons.phone),
-                    _buildInfoItem('Meters', 'CNT-452-985', Icons.gas_meter),
                     _buildInfoItem(
                       'Member Since',
                       _userCreatedAt ?? 'invalide',
@@ -114,23 +113,9 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                   ]),
 
-                  const SizedBox(height: 24),
-
                   // Statistics
                   //_buildStatsGrid(context),
-                  SizedBox(height: 30),
-                  SizedBox(
-                    width: 300,
-                    height: 50,
-                    child: ElevatedButton(
-                      onPressed: () {
-                        _authService.logout(context);
-                      },
-                      child: Text("logout", style: TextStyle(fontSize: 17)),
-                    ),
-                  ),
-
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 50),
                 ],
               ),
             ),

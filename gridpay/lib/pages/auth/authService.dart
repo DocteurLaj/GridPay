@@ -1,11 +1,13 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:gridpay/pages/ServiceHTTP/url_config.dart';
 import 'package:gridpay/pages/auth/login.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class AuthService {
-  static const String baseUrl = "https://spidertric.pythonanywhere.com";
+  static const String baseUrl =
+      globalBaseUrl; // "http://10.162.98.253:5000"; // "http://10.0.2.2:5000"; // "https://spidertric.pythonanywhere.com";
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
   Future<Map<String, dynamic>> login(String email, String password) async {
@@ -94,9 +96,10 @@ class AuthService {
 
   Future<void> logout(BuildContext context) async {
     await _storage.deleteAll();
-    Navigator.pushReplacement(
+    Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(builder: (context) => const AuthScreen()),
+      (route) => false, // Supprime TOUTES les routes précédentes
     );
   }
 

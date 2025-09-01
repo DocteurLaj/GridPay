@@ -1,8 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:gridpay/pages/auth/authService.dart';
 
-class SettingsPage extends StatelessWidget {
+class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
 
+  @override
+  State<SettingsPage> createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends State<SettingsPage> {
+  final AuthService _authService = AuthService();
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -50,7 +57,9 @@ class SettingsPage extends StatelessWidget {
 
           // Logout Button
           ElevatedButton(
-            onPressed: () {},
+            onPressed: () {
+              _authService.logout(context);
+            },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
               padding: const EdgeInsets.symmetric(vertical: 16),
