@@ -788,7 +788,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildStatisticsSection() {
+  Widget buildStatisticsSection() {
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -850,6 +850,7 @@ class _HomePageState extends State<HomePage> {
       ),
     );
   }
+
 
   Widget _buildStatCard({
     required String title,
